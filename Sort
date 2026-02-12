@@ -1,0 +1,115 @@
+local api = api or getgenv().api
+local plr = game.Players.LocalPlayer
+local uis = game:GetService("UserInputService")
+
+local items = {"None", "Bag", "Flashbang", "Combat", "Knife", "Double-Barrel SG", "Rifle", "Tactical Shotgun", "Revolver", "AUG", "Flintlock", "LMG", "SMG", "Shotgun", "AR", "P90", "Silencer AR", "Flamethrower", "AK47", "Drum Gun", "RPG", "Glock", "Pizza", "Hamburger", "Taco", "Donut", "Chicken", "SprayCan", "Phone", "Wallet"}
+
+getgenv().SorterSlots = getgenv().SorterSlots or {}
+getgenv().SorterKey = getgenv().SorterKey or Enum.KeyCode.RightShift
+getgenv().SortDelay = getgenv().SortDelay or 2.0
+local isWaitingForKey = false
+
+local function executeSort()
+    local bp = plr:FindFirstChild("Backpack")
+    local char = plr.Character
+    if not bp or not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum:UnequipTools() end
+    task.wait(0.3)
+    local tools = {}
+    for _, v in ipairs(bp:GetChildren()) do if v:IsA("Tool") then table.insert(tools, v) end end
+    for _, v in ipairs(char:GetChildren()) do if v:IsA("Tool") then table.insert(tools, v) end end
+    local sorted = {}
+    local used = {}
+    local ghosts = {}
+    for i = 1, 10 do
+        local target = getgenv().SorterSlots[i]
+        local found = nil
+        if target and target ~= "None" then
+            for _, t in ipairs(tools) do
+                if not used[t] and t.Name:lower():find(target:lower()) then
+                    found = t; used[t] = true; break
+                end
+            end
+        end
+        if found then
+            sorted[i] = found
+        else
+            local g = Instance.new("Tool")
+            g.Name = "" 
+            table.insert(ghosts, g)
+            sorted[i] = g
+        end
+    end
+    for _, t in ipairs(tools) do t.Parent = game:GetService("LogService") end
+    task.wait(0.1)
+    for i = 1, 10 do
+        sorted[i].Parent = bp
+        task.wait(0.07)
+    end
+    for _, t in ipairs(tools) do if not used[t] then t.Parent = bp end end
+    task.wait(0.1)
+    for _, g in ipairs(ghosts) do g:Destroy() end
+end
+
+local misctab = api:GetTab("misc") or api:AddTab("misc")
+local sortergrp = misctab:AddLeftGroupbox("Inventory Sorter")
+
+local bindLabel = sortergrp:AddLabel("Keybind: " .. tostring(getgenv().SorterKey.Name), true)
+
+local function updateBindLabel(txt)
+    pcall(function()
+        if bindLabel.SetText then bindLabel:SetText(txt)
+        elseif bindLabel.SetValue then bindLabel:SetValue(txt) end
+    end)
+end
+
+sortergrp:AddButton("Set Keybind", function()
+    isWaitingForKey = true
+    updateBindLabel("... Press any key ...")
+end)
+
+sortergrp:AddButton("Manual Sort", executeSort)
+
+sortergrp:AddSlider("Sort Delay", {
+    Text = "Delay (2s - 5s)",
+    Default = getgenv().SortDelay,
+    Min = 2, Max = 5, Rounding = 1,
+    Callback = function(v) getgenv().SortDelay = v end
+})
+
+sortergrp:AddToggle("AutoSort", {
+    Text = "Auto Sort on Respawn",
+    Default = false,
+    Callback = function(v) getgenv().AutoSortRespawn = v end
+})
+
+for i = 1, 10 do
+    sortergrp:AddDropdown("Slot "..i, {
+        Text = "Slot " .. i,
+        Values = items,
+        Default = getgenv().SorterSlots[i] or "None",
+        Callback = function(v) getgenv().SorterSlots[i] = v end
+    })
+end
+
+if getgenv().SortInput then getgenv().SortInput:Disconnect() end
+getgenv().SortInput = uis.InputBegan:Connect(function(input, gp)
+    if isWaitingForKey then
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            getgenv().SorterKey = input.KeyCode
+            isWaitingForKey = false
+            updateBindLabel("Keybind: " .. input.KeyCode.Name)
+        end
+        return
+    end
+    if not gp and input.KeyCode == getgenv().SorterKey then executeSort() end
+end)
+
+if getgenv().RespawnConn then getgenv().RespawnConn:Disconnect() end
+getgenv().RespawnConn = plr.CharacterAdded:Connect(function()
+    if getgenv().AutoSortRespawn then
+        task.wait(getgenv().SortDelay)
+        executeSort()
+    end
+end)
